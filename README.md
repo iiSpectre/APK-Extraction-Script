@@ -3,10 +3,15 @@ Recursively scans for APK files, extracts their contents, and collects embedded 
 
 # Instructions:
 Install the latest Python from the [Microsoft Store](https://apps.microsoft.com/detail/9pnrbtzxmb4z).
+
 Open Command Prompt and execute `pip install pillow`.
+
 Place APKExtraction.py into the folder you'd like for it to scan.
+
 Click on an empty space on the address bar of the folder and type `powershell`, and press enter.
+
 In the Powershell window, run `python APKExtraction.py`.
+
 The script will display:
 * How many APK's have been detected
 * Which APK is currently being extracted
