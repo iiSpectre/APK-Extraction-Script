@@ -17,4 +17,4 @@ The script will display:
 * Which APK is currently being extracted
 * When the script is finished
 
-Note: this script has only been tested/used with Samsung Firmware files, it may work with firmware from other devices.
+Note: this script has only been tested/used with Samsung Firmware files, and may work with firmware from other devices.
