@@ -18,3 +18,6 @@ The script will display:
 * When the script is finished
 
 Note: this script has only been tested/used with Samsung Firmware files, and may work with firmware from other devices.
+
+https://github.com/user-attachments/assets/5bf4bec7-ffbe-4b71-a89f-38f5ff4a84b2
+
