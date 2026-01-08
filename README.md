@@ -15,7 +15,7 @@ In the Powershell window, run `python APKExtraction.py`.
 The script will display:
 * How many APK's have been detected
 * Which APK is currently being extracted
-* When the script is finished
+* When the script is finished, and where the output directories to the created folders are
 
 Note: this script has only been tested/used with Samsung Firmware files, and may work with firmware from other devices.
 
