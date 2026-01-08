@@ -63,8 +63,8 @@ def handle_file(file_path: Path, source_label: str):
     if ext not in IMAGE_EXTENSIONS and ext not in MEDIA_EXTENSIONS:
         return
 
-    path_lower = str(file_path).lower()
-    is_bugdroid = any(k in path_lower for k in BUGDROID_KEYWORDS)
+    name_lower = file_path.name.lower()
+    is_bugdroid = any(k in name_lower for k in BUGDROID_KEYWORDS)
 
     if ext in IMAGE_EXTENSIONS:
         try:
@@ -113,3 +113,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
