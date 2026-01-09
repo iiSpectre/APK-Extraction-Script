@@ -7,6 +7,7 @@ Install the latest Python from the [Microsoft Store](https://apps.microsoft.com/
 Open Command Prompt and execute `pip install pillow`.
 
 Place APKExtraction.py into the folder you'd like for it to scan.
+> _Steps below not needed with One-Click Version._
 
 Click on an empty space on the address bar of the folder and type `powershell`, and press enter.
 
