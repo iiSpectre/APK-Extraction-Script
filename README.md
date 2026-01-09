@@ -15,3 +15,5 @@ The script will display:
 
 Note: this script has been tested successfully with Samsung, HTC, and Xiaomi Firmware, and may work with most firmware from other Android devices.
 
+https://github.com/user-attachments/assets/3afa5e42-1d17-46e5-947e-9ffc458a7717
+
