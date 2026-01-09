@@ -1,23 +1,28 @@
 import os
+import sys
 import zipfile
 import shutil
 from pathlib import Path
 from PIL import Image
 
+def run_in_console():
+    if os.name != "nt":
+        return
+    if not sys.stdout.isatty():
+        python_exe = sys.executable
+        script = Path(__file__).resolve()
+        os.system(f'start cmd /k "{python_exe} \\"{script}\\""')
+        sys.exit()
 
-BASE_DIR = Path.cwd()
+BASE_DIR = Path(__file__).parent.resolve()
 TEMP_EXTRACT_DIR = BASE_DIR / "_apk_extracted"
-
 IMAGE_OUTPUT_DIR = BASE_DIR / "output_images"
 BUGDROID_OUTPUT_DIR = BASE_DIR / "output_bugdroid_images"
 MEDIA_OUTPUT_DIR = BASE_DIR / "output_media"
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
-MEDIA_EXTENSIONS = {
-    ".ogg", ".mp3", ".wav", ".flac", ".aac", ".m4a",
-    ".mp4", ".3gp", ".mkv", ".avi", ".webm"
-}
-
+MEDIA_EXTENSIONS = {".ogg", ".mp3", ".wav", ".flac", ".aac", ".m4a",
+                    ".mp4", ".3gp", ".mkv", ".avi", ".webm"}
 BUGDROID_KEYWORDS = {"robot", "encroid", "droid"}
 
 processed_files: set[Path] = set()
@@ -30,12 +35,8 @@ def is_inside_extracted(path: Path) -> bool:
         return False
 
 def find_apks(root: Path) -> list[Path]:
-    return [
-        p for p in root.rglob("*.apk")
-        if p.is_file()
-        and not p.is_symlink()
-        and not is_inside_extracted(p.parent)
-    ]
+    return [p for p in root.rglob("*.apk")
+            if p.is_file() and not p.is_symlink() and not is_inside_extracted(p.parent)]
 
 def extract_apk(apk_path: Path) -> Path | None:
     target_dir = TEMP_EXTRACT_DIR / apk_path.stem
@@ -54,7 +55,6 @@ def handle_file(file_path: Path, source_label: str):
         real_path = file_path.resolve()
     except Exception:
         return
-
     if real_path in processed_files:
         return
     processed_files.add(real_path)
@@ -75,17 +75,17 @@ def handle_file(file_path: Path, source_label: str):
 
         out_dir = BUGDROID_OUTPUT_DIR if is_bugdroid else IMAGE_OUTPUT_DIR
         dest = out_dir / f"{source_label}_{res}_{file_path.name}"
+        out_dir.mkdir(exist_ok=True)
         shutil.copy2(file_path, dest)
 
     elif ext in MEDIA_EXTENSIONS:
+        MEDIA_OUTPUT_DIR.mkdir(exist_ok=True)
         dest = MEDIA_OUTPUT_DIR / f"{source_label}_{file_path.name}"
         shutil.copy2(file_path, dest)
 
 def scan_directory(root: Path, source_label: str, allow_extracted: bool):
     for path in root.rglob("*"):
-        if path.is_file():
-            if not allow_extracted and is_inside_extracted(path.parent):
-                continue
+        if path.is_file() and (allow_extracted or not is_inside_extracted(path.parent)):
             handle_file(path, source_label)
 
 def main():
@@ -112,5 +112,10 @@ def main():
     print(f"Media files: {MEDIA_OUTPUT_DIR}")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"Error: {e}")
 
+    print("\nScript finished. Press Enter to exit...")
+    input()
