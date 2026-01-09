@@ -1,5 +1,5 @@
 # APK-Extraction-Script
-Recursively scans extracted Android ROMS/Firmware for APK files, extracts their contents, and collects embedded image assets (PNG, JPG, JPEG). Images are labeled as Bugdroid-related or general based on filename keywords, along with video/audio files, and are then copied to separate output directories with collision-safe, resolution-prefixed filenames.
+Recursively scans extracted Android ROMS/Firmware for APK files, extracts their contents, and collects embedded image assets (.png, .jpg, .jpeg). Images are labeled as Bugdroid-related or general based on filename keywords, along with video/audio files, and are then copied to separate output directories with collision-safe, resolution-prefixed filenames.
 
 # Instructions:
 Install the latest Python from the [Microsoft Store](https://apps.microsoft.com/detail/9pnrbtzxmb4z).
