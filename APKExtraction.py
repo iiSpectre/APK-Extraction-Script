@@ -106,6 +106,10 @@ def main():
         if extracted:
             scan_directory(extracted, extracted.name, allow_extracted=True)
 
+    if TEMP_EXTRACT_DIR.exists():
+        shutil.rmtree(TEMP_EXTRACT_DIR)
+        print("Temporary APK extraction folder deleted.")
+
     print("\nDone.")
     print(f"Images: {IMAGE_OUTPUT_DIR}")
     print(f"Bugdroid images: {BUGDROID_OUTPUT_DIR}")
@@ -119,4 +123,5 @@ if __name__ == "__main__":
 
     print("\nScript finished. Press Enter to exit.")
     input()
+
 
