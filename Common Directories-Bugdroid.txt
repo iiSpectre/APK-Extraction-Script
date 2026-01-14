@@ -1,0 +1,7 @@
+Some different places you can find bugdroid renders if they dont end up in the folder are;
+GmsCore
+framework-res
+Velvet
+SystemUI
+SetupWizard
+Settings
