@@ -4,15 +4,15 @@ import zipfile
 import shutil
 from pathlib import Path
 from PIL import Image
+import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
-def run_in_console():
-    if os.name != "nt":
-        return
-    if not sys.stdout.isatty():
-        python_exe = sys.executable
-        script = Path(__file__).resolve()
-        os.system(f'start cmd /k "{python_exe} \\"{script}\\""')
-        sys.exit()
+USE_HARDLINKS = True
+PARTIAL_HASH_SIZE = 64 * 1024       # 64 KB
+FULL_HASH_LIMIT = 20 * 1024 * 1024  # 20 MB
+MAX_EXTRACT_THREADS = min(8, os.cpu_count() or 4)
+MAX_FILE_THREADS = min(8, os.cpu_count() or 4)
 
 BASE_DIR = Path(__file__).parent.resolve()
 TEMP_EXTRACT_DIR = BASE_DIR / "_apk_extracted"
@@ -25,68 +25,120 @@ MEDIA_EXTENSIONS = {".ogg", ".mp3", ".wav", ".flac", ".aac", ".m4a",
                     ".mp4", ".3gp", ".mkv", ".avi", ".webm"}
 BUGDROID_KEYWORDS = {"robot", "encroid", "droid"}
 
-processed_files: set[Path] = set()
+seen_hashes: dict[str, set[str]] = {}
+hash_lock = threading.Lock()
+print_lock = threading.Lock()
 
-def is_inside_extracted(path: Path) -> bool:
+def quick_file_hash(path: Path) -> str:
     try:
-        path.resolve().relative_to(TEMP_EXTRACT_DIR.resolve())
-        return True
-    except ValueError:
-        return False
+        size = path.stat().st_size
+        h = hashlib.sha1()
+        with path.open("rb") as f:
+            h.update(f.read(PARTIAL_HASH_SIZE))
+        if size > FULL_HASH_LIMIT:
+            with path.open("rb") as f:
+                f.seek(max(0, size - PARTIAL_HASH_SIZE))
+                h.update(f.read(PARTIAL_HASH_SIZE))
+        return f"{size}:{h.hexdigest()}"
+    except Exception:
+        return ""
 
-def find_apks(root: Path) -> list[Path]:
-    return [p for p in root.rglob("*.apk")
-            if p.is_file() and not p.is_symlink() and not is_inside_extracted(p.parent)]
-
-def extract_apk(apk_path: Path) -> Path | None:
-    target_dir = TEMP_EXTRACT_DIR / apk_path.stem
+def full_file_hash(path: Path) -> str:
+    h = hashlib.sha256()
     try:
-        with zipfile.ZipFile(apk_path) as z:
-            z.extractall(target_dir)
-        return target_dir
-    except zipfile.BadZipFile:
-        print(f"Warning: Invalid APK '{apk_path}'")
-    except Exception as e:
-        print(f"Error extracting '{apk_path}': {e}")
-    return None
+        with path.open("rb") as f:
+            while chunk := f.read(8192):
+                h.update(chunk)
+        return h.hexdigest()
+    except Exception:
+        return ""
 
 def handle_file(file_path: Path, source_label: str):
-    try:
-        real_path = file_path.resolve()
-    except Exception:
-        return
-    if real_path in processed_files:
-        return
-    processed_files.add(real_path)
-
     ext = file_path.suffix.lower()
     if ext not in IMAGE_EXTENSIONS and ext not in MEDIA_EXTENSIONS:
         return
 
+    try:
+        real_path = file_path.resolve()
+        size = real_path.stat().st_size
+    except Exception:
+        return
+
+    qh = quick_file_hash(real_path)
+    if not qh:
+        return
+
+    is_duplicate = False
+    fh = None
+
+    with hash_lock:
+        if qh not in seen_hashes:
+            seen_hashes[qh] = set()
+        else:
+            fh = full_file_hash(real_path)
+            if fh in seen_hashes[qh]:
+                is_duplicate = True
+
+    if is_duplicate:
+        return
+
+    if fh is None:
+        if size <= FULL_HASH_LIMIT:
+            fh = full_file_hash(real_path)
+        else:
+            fh = "LARGE"
+
+    with hash_lock:
+        seen_hashes[qh].add(fh)
+
     name_lower = file_path.name.lower()
     is_bugdroid = any(k in name_lower for k in BUGDROID_KEYWORDS)
-
     if ext in IMAGE_EXTENSIONS:
+        out_dir = BUGDROID_OUTPUT_DIR if is_bugdroid else IMAGE_OUTPUT_DIR
         try:
             with Image.open(file_path) as img:
                 res = f"{img.width}x{img.height}"
         except Exception:
             res = "unknown"
-
-        out_dir = BUGDROID_OUTPUT_DIR if is_bugdroid else IMAGE_OUTPUT_DIR
-        dest = out_dir / f"{source_label}_{res}_{file_path.name}"
         out_dir.mkdir(exist_ok=True)
-        shutil.copy2(file_path, dest)
+        dest = out_dir / f"{source_label}_{res}_{file_path.name}"
+    else:
+        out_dir = MEDIA_OUTPUT_DIR
+        out_dir.mkdir(exist_ok=True)
+        dest = out_dir / f"{source_label}_{file_path.name}"
 
-    elif ext in MEDIA_EXTENSIONS:
-        MEDIA_OUTPUT_DIR.mkdir(exist_ok=True)
-        dest = MEDIA_OUTPUT_DIR / f"{source_label}_{file_path.name}"
-        shutil.copy2(file_path, dest)
+    try:
+        if USE_HARDLINKS and not dest.exists():
+            os.link(real_path, dest)
+        else:
+            shutil.copy2(real_path, dest)
+    except Exception:
+        shutil.copy2(real_path, dest)
 
-def scan_directory(root: Path, source_label: str, allow_extracted: bool):
-    for path in root.rglob("*"):
-        if path.is_file() and (allow_extracted or not is_inside_extracted(path.parent)):
-            handle_file(path, source_label)
+def scan_directory(root: Path, source_label: str, use_threads=True):
+    files = [p for p in root.rglob("*") if p.is_file()]
+    if use_threads and files:
+        with ThreadPoolExecutor(max_workers=MAX_FILE_THREADS) as executor:
+            executor.map(lambda f: handle_file(f, source_label), files)
+    else:
+        for f in files:
+            handle_file(f, source_label)
+
+def find_apks(root: Path) -> list[Path]:
+    return [p for p in root.rglob("*.apk") if p.is_file()]
+
+def extract_apk(apk_path: Path) -> Path | None:
+    with print_lock:
+        print(f"Extracting: {apk_path}")
+    target_dir = TEMP_EXTRACT_DIR / apk_path.stem
+    try:
+        with zipfile.ZipFile(apk_path) as z:
+            z.extractall(target_dir)
+        return target_dir
+    except Exception as e:
+        with print_lock:
+            print(f"Error extracting '{apk_path}': {e}")
+        return None
 
 def main():
     TEMP_EXTRACT_DIR.mkdir(exist_ok=True)
@@ -95,20 +147,26 @@ def main():
     MEDIA_OUTPUT_DIR.mkdir(exist_ok=True)
 
     print("Scanning loose images and media...")
-    scan_directory(BASE_DIR, "loose", allow_extracted=False)
+    scan_directory(BASE_DIR, "loose")
 
     apks = find_apks(BASE_DIR)
     print(f"Found {len(apks)} APK(s)")
+    print(f"Extracting using {MAX_EXTRACT_THREADS} threads...\n")
 
-    for apk in apks:
-        print(f"Extracting: {apk}")
-        extracted = extract_apk(apk)
-        if extracted:
-            scan_directory(extracted, extracted.name, allow_extracted=True)
+    extracted_dirs = []
+    with ThreadPoolExecutor(max_workers=MAX_EXTRACT_THREADS) as executor:
+        futures = [executor.submit(extract_apk, apk) for apk in apks]
+        for future in as_completed(futures):
+            extracted = future.result()
+            if extracted:
+                extracted_dirs.append(extracted)
+
+    for extracted in extracted_dirs:
+        scan_directory(extracted, extracted.name)
 
     if TEMP_EXTRACT_DIR.exists():
         shutil.rmtree(TEMP_EXTRACT_DIR)
-        print("Temporary APK extraction folder deleted.")
+        print("\nTemporary APK extraction folder deleted.")
 
     print("\nDone.")
     print(f"Images: {IMAGE_OUTPUT_DIR}")
@@ -123,5 +181,3 @@ if __name__ == "__main__":
 
     print("\nScript finished. Press Enter to exit.")
     input()
-
-
